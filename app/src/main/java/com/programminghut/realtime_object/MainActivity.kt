@@ -14,6 +14,8 @@ import android.os.HandlerThread
 import android.view.Surface
 import android.view.TextureView
 import android.widget.ImageView
+import android.widget.TextView
+import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import com.programminghut.realtime_object.ml.SsdMobilenetV11Metadata1
 import org.tensorflow.lite.support.common.FileUtil
@@ -22,6 +24,7 @@ import org.tensorflow.lite.support.image.TensorImage
 import org.tensorflow.lite.support.image.ops.ResizeOp
 
 class MainActivity : AppCompatActivity() {
+    lateinit var detectionTextView: TextView
 
     lateinit var labels:List<String>
     var colors = listOf<Int>(
@@ -41,6 +44,8 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         get_permission()
+
+        detectionTextView = findViewById(R.id.detectionTextView)
 
         labels = FileUtil.loadLabels(this, "labels.txt")
         imageProcessor = ImageProcessor.Builder().add(ResizeOp(300, 300, ResizeOp.ResizeMethod.BILINEAR)).build()
@@ -62,7 +67,6 @@ class MainActivity : AppCompatActivity() {
             override fun onSurfaceTextureDestroyed(p0: SurfaceTexture): Boolean {
                 return false
             }
-
             override fun onSurfaceTextureUpdated(p0: SurfaceTexture) {
                 bitmap = textureView.bitmap!!
                 var image = TensorImage.fromBitmap(bitmap)
@@ -77,26 +81,67 @@ class MainActivity : AppCompatActivity() {
                 var mutable = bitmap.copy(Bitmap.Config.ARGB_8888, true)
                 val canvas = Canvas(mutable)
 
+
                 val h = mutable.height
                 val w = mutable.width
-                paint.textSize = h/15f
-                paint.strokeWidth = h/85f
+                paint.textSize = h / 15f
+                paint.strokeWidth = h / 85f
                 var x = 0
+                var alertMessage = ""
+                var isWarningShown = false
                 scores.forEachIndexed { index, fl ->
                     x = index
                     x *= 4
-                    if(fl > 0.5){
+                    if (fl > 0.5) {
                         paint.setColor(colors.get(index))
                         paint.style = Paint.Style.STROKE
-                        canvas.drawRect(RectF(locations.get(x+1)*w, locations.get(x)*h, locations.get(x+3)*w, locations.get(x+2)*h), paint)
+                        canvas.drawRect(
+                            RectF(
+                                locations.get(x + 1) * w,
+                                locations.get(x) * h,
+                                locations.get(x + 3) * w,
+                                locations.get(x + 2) * h
+                            ), paint
+                        )
                         paint.style = Paint.Style.FILL
-                        canvas.drawText(labels.get(classes.get(index).toInt())+" "+fl.toString(), locations.get(x+1)*w, locations.get(x)*h, paint)
+
+                        val detectedObject = labels.get(classes.get(index).toInt())
+                        val detectionConfidence = fl
+
+                        // Check for specific objects and show in TextView
+                        if (isDangerousObject(detectedObject)) {
+                            alertMessage += "$detectedObject detected with confidence $detectionConfidence\n"
+                            isWarningShown = true
+                        }
+
+                        canvas.drawText(
+                            "${labels.get(classes.get(index).toInt())} $fl",
+                            locations.get(x + 1) * w,
+                            locations.get(x) * h,
+                            paint
+                        )
                     }
                 }
 
                 imageView.setImageBitmap(mutable)
+                // Show detected objects in the TextView
+                detectionTextView.text = alertMessage
+                // Show warning in the TextView only once
+                if (isWarningShown) {
+                    showWarning()
+                }
+
+            }
+
+            private fun showWarning() {
+                // You can customize the warning message and appearance here
+                detectionTextView.text = "Warning: Unauthorized object detected!"
+            }
 
 
+            private fun isDangerousObject(detectedObject: String): Boolean {
+                val dangerousObjects = listOf("mouse", "keyboard", "tv", "laptop", "knife")
+                return dangerousObjects.contains(detectedObject)
             }
         }
 
